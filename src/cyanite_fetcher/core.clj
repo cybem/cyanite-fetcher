@@ -4,13 +4,110 @@
             [clj-time.local :as tl]
             [criterium.core :as cr]
             [clojurewerkz.elastisch.rest :as esr]
-            [clojurewerkz.elastisch.rest.document :as esrd])
+            [clojurewerkz.elastisch.rest.document :as esrd]
+            [qbits.alia :as alia])
   (:gen-class))
+
+;;------------------------------------------------------------------------------
+;; Rollups
+;;------------------------------------------------------------------------------
+
+(def ^:const rollups '("60s:5356800s"))
+
+(defn to-seconds
+  "Takes a string containing a duration like 13s, 4h etc. and
+  converts it to seconds"
+  [s]
+  (let [[_ value unit] (re-matches #"^([0-9]+)([a-z])$" s)
+        quantity (Integer/valueOf value)]
+    (case unit
+      "s" quantity
+      "m" (* 60 quantity)
+      "h" (* 60 60 quantity)
+      "d" (* 24 60 60 quantity)
+      "w" (* 7 24 60 60 quantity)
+      "y" (* 365 24 60 60 quantity)
+      (throw (ex-info (str "unknown rollup unit: " unit) {})))))
+
+(defn convert-shorthand-rollup
+  "Converts an individual rollup to a {:rollup :period :ttl} tri"
+  [rollup]
+  (if (string? rollup)
+    (let [[rollup-string retention-string] (str/split rollup #":" 2)
+          rollup-secs (to-seconds rollup-string)
+          retention-secs (to-seconds retention-string)]
+      {:rollup rollup-secs
+       :period (/ retention-secs rollup-secs)
+       :ttl    (* rollup-secs (/ retention-secs rollup-secs))})
+    rollup))
+
+(defn convert-shorthand-rollups
+  "Where a rollup has been given in Carbon's shorthand form
+   convert it to a {:rollup :period} pair"
+  [rollups]
+  (map convert-shorthand-rollup rollups))
+
+(defn now
+  "Returns a unix epoch"
+  []
+  (quot (System/currentTimeMillis) 1000))
+
+(defn find-best-rollup
+  "Find most precise storage period given the oldest point wanted"
+  [from rollups]
+  (let [within (fn [{:keys [rollup period] :as rollup-def}]
+                 (and (>= (Long/parseLong from) (- (now) (* rollup period)))
+                      rollup-def))]
+    (some within (sort-by :rollup rollups))))
 
 ;;------------------------------------------------------------------------------
 ;; Cassandra
 ;;------------------------------------------------------------------------------
 
+(def ^:const keyspace "metric")
+
+(defn fetchq
+  "Yields a cassandra prepared statement of 7 arguments:
+
+* `paths`: list of paths
+* `tenant`: tenant identifier
+* `rollup`: interval between points at this resolution
+* `period`: rollup multiplier which determines the time to keep points for
+* `min`: return points starting from this timestamp
+* `max`: return points up to this timestamp
+* `limit`: maximum number of points to return"
+  [session]
+  (alia/prepare
+   session
+   (str
+    "SELECT path,data,time FROM metric WHERE "
+    "path = ? AND tenant = ? AND rollup = ? AND period = ? "
+    "AND time >= ? AND time <= ? ORDER BY time ASC;")))
+
+(defn par-fetch [session fetch! paths tenant rollup period from to]
+  (let [futures
+        (doall (map #(future
+                       (->> (alia/execute
+                             session fetch!
+                             {:values [% tenant (int rollup)
+                                       (int period)
+                                       from to]
+                              :fetch-size Integer/MAX_VALUE})
+                            ;;(map detect-aggregate)
+                            (seq)))
+                    paths))]
+    (seq (remove nil? (reduce into (map deref futures))))))
+
+(defn c-get-data
+  "Get data from C*."
+  [host paths tenant rollup period from to]
+  (let [session (-> (alia/cluster {:contact-points [host]})
+                    (alia/connect keyspace))
+        fetch! (fetchq session)]
+    (println "Getting data form Cassandra...")
+    (let [data (time (doall (par-fetch session fetch! paths tenant rollup
+                                       period from to)))]
+      data)))
 
 ;;------------------------------------------------------------------------------
 ;; ElasticSearch
@@ -73,7 +170,7 @@
   "Get paths from ElasticSearch."
   [host path tenant]
   (println "Getting paths form ElasticSearch...")
-  (let [paths (time (doall (lookup host (or tenant "NONE") path)))]
+  (let [paths (time (doall (lookup host tenant path)))]
     (println "Number of paths:" (count paths))
     paths))
 
@@ -84,17 +181,26 @@
 (defn run-bench
   "Run benchmark."
   [chost eshost path tenant from to]
-  (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
-  (println)
-  (println "Cassandra host:    " chost)
-  (println "ElasticSearch host:" eshost)
-  (println)
-  (println "Path:  " path)
-  (println "Tenant:" tenant)
-  (println "From:  " from)
-  (println "To:    " to)
-  (println)
-  (es-get-paths eshost path tenant))
+  (let [{:keys [rollup period]}
+        (find-best-rollup (str from) (convert-shorthand-rollups rollups))
+        tenant (or tenant "NONE")
+        to (if to (Long/parseLong (str to)) (now))
+        from (Long/parseLong (str from))]
+    (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
+    (println)
+    (println "Cassandra host:    " chost)
+    (println "ElasticSearch host:" eshost)
+    (println)
+    (println "Path:  " path)
+    (println "Tenant:" tenant)
+    (println "From:  " from)
+    (println "To:    " to)
+    (println)
+    (println "Rollup:" rollup)
+    (println "Period:" period)
+    (println)
+    (let [paths (es-get-paths eshost path tenant)
+          data (c-get-data chost paths tenant rollup period from to)])))
 
 ;;------------------------------------------------------------------------------
 ;; Command line
