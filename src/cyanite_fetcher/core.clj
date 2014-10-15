@@ -62,6 +62,7 @@
     (map #(:_source %) hits)))
 
 (defn lookup [host tenant path]
+  "Look up path."
   (let [full-path-cache (atom #{})
         conn (esr/connect host)
         scrollfn (partial esrd/scroll-seq conn)
@@ -69,9 +70,11 @@
     (map :path (search queryfn scrollfn tenant path true))))
 
 (defn es-get-paths
+  "Get paths from ElasticSearch."
   [host path tenant]
-  (let [paths (lookup host (or tenant "NONE") path)]
-    (println "Number of paths: " (count paths))
+  (println "Getting paths form ElasticSearch...")
+  (let [paths (time (doall (lookup host (or tenant "NONE") path)))]
+    (println "Number of paths:" (count paths))
     paths))
 
 ;;------------------------------------------------------------------------------
