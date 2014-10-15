@@ -9,58 +9,6 @@
   (:gen-class))
 
 ;;------------------------------------------------------------------------------
-;; Rollups
-;;------------------------------------------------------------------------------
-
-(def ^:const rollups '("60s:5356800s"))
-
-(defn to-seconds
-  "Takes a string containing a duration like 13s, 4h etc. and
-  converts it to seconds"
-  [s]
-  (let [[_ value unit] (re-matches #"^([0-9]+)([a-z])$" s)
-        quantity (Integer/valueOf value)]
-    (case unit
-      "s" quantity
-      "m" (* 60 quantity)
-      "h" (* 60 60 quantity)
-      "d" (* 24 60 60 quantity)
-      "w" (* 7 24 60 60 quantity)
-      "y" (* 365 24 60 60 quantity)
-      (throw (ex-info (str "unknown rollup unit: " unit) {})))))
-
-(defn convert-shorthand-rollup
-  "Converts an individual rollup to a {:rollup :period :ttl} tri"
-  [rollup]
-  (if (string? rollup)
-    (let [[rollup-string retention-string] (str/split rollup #":" 2)
-          rollup-secs (to-seconds rollup-string)
-          retention-secs (to-seconds retention-string)]
-      {:rollup rollup-secs
-       :period (/ retention-secs rollup-secs)
-       :ttl    (* rollup-secs (/ retention-secs rollup-secs))})
-    rollup))
-
-(defn convert-shorthand-rollups
-  "Where a rollup has been given in Carbon's shorthand form
-   convert it to a {:rollup :period} pair"
-  [rollups]
-  (map convert-shorthand-rollup rollups))
-
-(defn now
-  "Returns a unix epoch"
-  []
-  (quot (System/currentTimeMillis) 1000))
-
-(defn find-best-rollup
-  "Find most precise storage period given the oldest point wanted"
-  [from rollups]
-  (let [within (fn [{:keys [rollup period] :as rollup-def}]
-                 (and (>= (Long/parseLong from) (- (now) (* rollup period)))
-                      rollup-def))]
-    (some within (sort-by :rollup rollups))))
-
-;;------------------------------------------------------------------------------
 ;; Cassandra
 ;;------------------------------------------------------------------------------
 
@@ -173,6 +121,58 @@
   (let [paths (time (doall (lookup host tenant path)))]
     (println "Number of paths:" (count paths))
     paths))
+
+;;------------------------------------------------------------------------------
+;; Rollups
+;;------------------------------------------------------------------------------
+
+(def ^:const rollups '("60s:5356800s"))
+
+(defn to-seconds
+  "Takes a string containing a duration like 13s, 4h etc. and
+  converts it to seconds"
+  [s]
+  (let [[_ value unit] (re-matches #"^([0-9]+)([a-z])$" s)
+        quantity (Integer/valueOf value)]
+    (case unit
+      "s" quantity
+      "m" (* 60 quantity)
+      "h" (* 60 60 quantity)
+      "d" (* 24 60 60 quantity)
+      "w" (* 7 24 60 60 quantity)
+      "y" (* 365 24 60 60 quantity)
+      (throw (ex-info (str "unknown rollup unit: " unit) {})))))
+
+(defn convert-shorthand-rollup
+  "Converts an individual rollup to a {:rollup :period :ttl} tri"
+  [rollup]
+  (if (string? rollup)
+    (let [[rollup-string retention-string] (str/split rollup #":" 2)
+          rollup-secs (to-seconds rollup-string)
+          retention-secs (to-seconds retention-string)]
+      {:rollup rollup-secs
+       :period (/ retention-secs rollup-secs)
+       :ttl    (* rollup-secs (/ retention-secs rollup-secs))})
+    rollup))
+
+(defn convert-shorthand-rollups
+  "Where a rollup has been given in Carbon's shorthand form
+   convert it to a {:rollup :period} pair"
+  [rollups]
+  (map convert-shorthand-rollup rollups))
+
+(defn now
+  "Returns a unix epoch"
+  []
+  (quot (System/currentTimeMillis) 1000))
+
+(defn find-best-rollup
+  "Find most precise storage period given the oldest point wanted"
+  [from rollups]
+  (let [within (fn [{:keys [rollup period] :as rollup-def}]
+                 (and (>= (Long/parseLong from) (- (now) (* rollup period)))
+                      rollup-def))]
+    (some within (sort-by :rollup rollups))))
 
 ;;------------------------------------------------------------------------------
 ;; Benchmark
