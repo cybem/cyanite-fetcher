@@ -2,7 +2,9 @@
   (:require [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clj-time.local :as tl]
-            [criterium.core :as cr])
+            [criterium.core :as cr]
+            [clojurewerkz.elastisch.rest :as esr]
+            [clojurewerkz.elastisch.rest.document :as esrd])
   (:gen-class))
 
 ;;------------------------------------------------------------------------------
@@ -14,6 +16,63 @@
 ;; ElasticSearch
 ;;------------------------------------------------------------------------------
 
+(def ES_DEF_TYPE "path")
+(def ES_TYPE_MAP {ES_DEF_TYPE {:_all { :enabled false }
+                               :_source { :compress false }
+                               :properties {:tenant {:type "string" :index "not_analyzed"}
+                                            :path {:type "string" :index "not_analyzed"}}}})
+
+(def ^:const period 46)
+(def ^:const index "cyanite_paths")
+
+(defn path-depth
+  "Get the depth of a path, with depth + 1 if it ends in a period"
+  [path]
+  (loop [cnt 1
+         from-dex 0]
+    (let [dex (.indexOf path period from-dex)]
+      (if (= dex -1)
+        cnt
+        (recur (inc cnt) (inc dex))))))
+
+(defn build-es-filter
+  "generate the filter portion of an es query"
+  [path tenant leafs-only]
+  (let [depth (path-depth path)
+        p (str/replace (str/replace path "." "\\.") "*" ".*")
+        f (vector
+           {:range {:depth {:from depth :to depth}}}
+           {:term {:tenant tenant}}
+           {:regexp {:path p :_cache true}})]
+    (if leafs-only (conj f {:term {:leaf true}}) f)))
+
+(defn build-es-query
+  "generate an ES query to return the proper result set"
+  [path tenant leafs-only]
+  {:filtered {:filter {:bool {:must (build-es-filter path tenant leafs-only)}}}})
+
+(defn search
+  "search for a path"
+  [query scroll tenant path leafs-only]
+  (let [res (query :query (build-es-query path tenant leafs-only)
+                   :size 100
+                   :search_type "query_then_fetch"
+                   :scroll "1m")
+        hits (scroll res)]
+    (map #(:_source %) hits)))
+
+(defn lookup [host tenant path]
+  (let [full-path-cache (atom #{})
+        conn (esr/connect host)
+        scrollfn (partial esrd/scroll-seq conn)
+        queryfn (partial esrd/search conn index ES_DEF_TYPE)]
+    (map :path (search queryfn scrollfn tenant path true))))
+
+(defn es-get-paths
+  [host path tenant]
+  (let [paths (lookup host (or tenant "NONE") path)]
+    (println "Number of paths: " (count paths))
+    paths))
 
 ;;------------------------------------------------------------------------------
 ;; Benchmark
@@ -24,13 +83,15 @@
   [chost eshost path tenant from to]
   (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
   (println)
-  (println "Cassandra host:\t\t" chost)
-  (println "ElasticSearch host:\t" eshost)
+  (println "Cassandra host:    " chost)
+  (println "ElasticSearch host:" eshost)
   (println)
-  (println "Path:\t" path)
-  (println "Tenant:\t" tenant)
-  (println "From:\t" from)
-  (println "To:\t" to))
+  (println "Path:  " path)
+  (println "Tenant:" tenant)
+  (println "From:  " from)
+  (println "To:    " to)
+  (println)
+  (es-get-paths eshost path tenant))
 
 ;;------------------------------------------------------------------------------
 ;; Command line

@@ -6,7 +6,8 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/tools.cli "0.3.1"]
                  [clj-time "0.9.0-beta1"]
-                 [criterium "0.4.3"]]
+                 [criterium "0.4.3"]
+                 [clojurewerkz/elastisch "2.1.0-beta6"]]
   :main ^:skip-aot cyanite-fetcher.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
