@@ -4,7 +4,7 @@ set -e
 
 readonly VERSION=0.1.0
 readonly JAR_FILE="cyanite-fetcher-$VERSION-standalone.jar"
-readonly JAVA_CMD="java -jar"
+readonly JAVA_CMD="java -Xms1024M -Xmx8192M -Xmn800M -jar"
 
 readonly SCRIPT_DIR=$(dirname $0)
 readonly NEAR_FILE=$SCRIPT_DIR/$JAR_FILE
