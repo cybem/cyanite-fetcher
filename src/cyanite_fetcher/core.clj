@@ -318,16 +318,14 @@
 ;; Benchmark
 ;;------------------------------------------------------------------------------
 
-(defn run-bench
-  "Run benchmark."
+(defn bench-itself
+  "Benchmark itself."
   [chost eshost path tenant from to]
-  (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
   (let [{:keys [rollup period]}
         (find-best-rollup (str from) (convert-shorthand-rollups rollups))
         tenant (or tenant "NONE")
         to (if to (Long/parseLong (str to)) (now))
         from (Long/parseLong (str from))]
-    (newline)
     (println "Cassandra host:    " chost)
     (println "ElasticSearch host:" eshost)
     (newline)
@@ -352,7 +350,15 @@
         (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
         ;;(norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
         ;;(norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap")
-        )))
+        ))))
+
+(defn run-bench
+  "Run benchmark."
+  [chost eshost path tenant from to]
+  (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
+  (newline)
+  (time (bench-itself chost eshost path tenant from to))
+  (newline)
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
