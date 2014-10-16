@@ -296,8 +296,6 @@
           data (c-get-data chost paths tenant rollup period from to)
           reduce-fdata (flatter data (fn [data] (reduce into data)) "reduce")]
       (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
-      (flatter data (fn [data] (flatten data)) "flatten")
-      (flatter data (fn [data] (into [] (r/flatten data))) "r/flatten")
       (cleaner reduce-fdata (fn [data] (remove nil? data))  "remove")
       (cleaner reduce-fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       (r-flatter-cleaner data)))
