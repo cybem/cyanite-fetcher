@@ -51,38 +51,11 @@
     (println)
     cdata))
 
-(defn reduce-flatter
-  "Reduce flatter."
-  [data]
-  (println "Flatting data with reduce...")
-  (let [fdata (time (doall (reduce into data)))]
-    (println "Number of rows:" (count fdata))
-    (println)
-    fdata))
-
-(defn rreduce-flatter
-  "R/reduce flatter."
-  [data]
-  (println "Flatting data with r/reduce...")
-  (let [fdata (time (doall (r/reduce into [] data)))]
-    (println "Number of rows:" (count fdata))
-    (println)
-    fdata))
-
-(defn flatten-flatter
-  "Flatten flatter."
-  [data]
-  (println "Flatting data with flatten...")
-  (let [fdata (time (doall (flatten data)))]
-    (println "Number of rows:" (count fdata))
-    (println)
-    fdata))
-
-(defn rflatten-flatter
-  "R/flatten flatter."
-  [data]
-  (println "Flatting data with r/flatten...")
-  (let [fdata (time (doall (into [] (r/flatten data))))]
+(defn flatter
+  "Flatter."
+  [data f name]
+  (println (format "Flatting data with %s..." name))
+  (let [fdata (time (doall (f data)))]
     (println "Number of rows:" (count fdata))
     (println)
     fdata))
@@ -259,10 +232,10 @@
     (println)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
-          reduce-fdata (reduce-flatter data)
-          rreduce-fdata (rreduce-flatter data)
-          flatten-fdata (flatten-flatter data)
-          rflatten-fdata (rflatten-flatter data)
+          reduce-fdata (flatter data (fn [data] (reduce into data)) "reduce")
+          rreduce-fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
+          flatten-fdata (flatter data (fn [data] (flatten data)) "flatten")
+          rflatten-fdata (flatter data (fn [data] (into [] (r/flatten data))) "r/flatten")
           remove-cdata (remove-cleaner reduce-fdata)
           rremove-cdata (rremove-cleaner reduce-fdata)]))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
