@@ -96,14 +96,14 @@
   "Fetch data in parallel fashion."
   (let [futures
         (doall (map #(future
-                       (->> (alia/execute
-                             session fetch!
-                             {:values [% tenant (int rollup)
-                                       (int period)
-                                       from to]
-                              :fetch-size Integer/MAX_VALUE})
-                            (map detect-aggregate)
-                            (seq)))
+                       (let [data (alia/execute
+                                   session fetch!
+                                   {:values [% tenant (int rollup)
+                                             (int period)
+                                             from to]
+                                    :fetch-size Integer/MAX_VALUE})]
+                         (->> (doall (map detect-aggregate data))
+                              (seq))))
                     paths))]
     (map deref futures)))
 
@@ -349,8 +349,7 @@
     (newline)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
-          fdata (flatter data (fn [data] (r/reduce into [] data)) "warming r/reduce")]
-      (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
+          fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")]
       (flatter data (fn [data] (reduce into data)) "reduce")
       (cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       (cleaner fdata (fn [data] (remove nil? data))  "remove")
