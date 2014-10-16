@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clj-time.local :as tl]
+            [clojure.core.reducers :as r]
             [criterium.core :as cr]
             [clojurewerkz.elastisch.rest :as esr]
             [clojurewerkz.elastisch.rest.document :as esrd]
@@ -32,7 +33,53 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
+(defn std-cleaner
+  "Standard cleaner."
+  [data]
+  (println "Cleaning data with standard cleaner...")
+  (let [cdata (time (doall (remove nil? data)))]
+    (println "Number of rows:" (count cdata))
+    (println)
+    cdata))
+
+(defn r-cleaner
+  "R/remove cleaner."
+  [data]
+  (println "Cleaning data with r/remove cleaner...")
+  (let [cdata (time (doall (into [] (r/remove nil? data))))]
+    (println "Number of rows:" (count cdata))
+    (println)
+    cdata))
+
+(defn std-reducer
+  "Standard reducer."
+  [data]
+  (println "Reducing data with standard reducer...")
+  (let [rdata (time (doall (reduce into data)))]
+    (println "Number of rows:" (count rdata))
+    (println)
+    rdata))
+
+(defn flatten-reducer
+  "Flatten reducer."
+  [data]
+  (println "Reducing data with flatten reducer...")
+  (let [rdata (time (doall (flatten data)))]
+    (println "Number of rows:" (count rdata))
+    (println)
+    rdata))
+
+(defn rflatten-reducer
+  "R/flatten reducer."
+  [data]
+  (println "Reducing data with r/flatten reducer...")
+  (let [rdata (time (doall (into [] (r/flatten data))))]
+    (println "Number of rows:" (count rdata))
+    (println)
+    rdata))
+
 (defn par-fetch [session fetch! paths tenant rollup period from to]
+  "Fetch data in parallel fashion."
   (let [futures
         (doall (map #(future
                        (->> (alia/execute
@@ -44,7 +91,7 @@
                             ;;(map detect-aggregate)
                             (seq)))
                     paths))]
-    (seq (remove nil? (reduce into (map deref futures))))))
+    (map deref futures)))
 
 (defn c-get-data
   "Get data from C*."
@@ -55,6 +102,7 @@
     (println "Getting data form Cassandra...")
     (let [data (time (doall (par-fetch session fetch! paths tenant rollup
                                        period from to)))]
+      (println)
       data)))
 
 ;;------------------------------------------------------------------------------
@@ -120,6 +168,7 @@
   (println "Getting paths form ElasticSearch...")
   (let [paths (time (doall (lookup host tenant path)))]
     (println "Number of paths:" (count paths))
+    (println)
     paths))
 
 ;;------------------------------------------------------------------------------
@@ -181,12 +230,12 @@
 (defn run-bench
   "Run benchmark."
   [chost eshost path tenant from to]
+  (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
   (let [{:keys [rollup period]}
         (find-best-rollup (str from) (convert-shorthand-rollups rollups))
         tenant (or tenant "NONE")
         to (if to (Long/parseLong (str to)) (now))
         from (Long/parseLong (str from))]
-    (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
     (println)
     (println "Cassandra host:    " chost)
     (println "ElasticSearch host:" eshost)
@@ -200,7 +249,13 @@
     (println "Period:" period)
     (println)
     (let [paths (es-get-paths eshost path tenant)
-          data (c-get-data chost paths tenant rollup period from to)])))
+          data (c-get-data chost paths tenant rollup period from to)
+          std-rdata (std-reducer data)
+          flatten-rdata (flatten-reducer data)
+          rflatten-rdata (rflatten-reducer data)
+          std-cdata (std-cleaner std-rdata)
+          r-cdata (r-cleaner std-rdata)]))
+  (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
 ;; Command line
@@ -248,4 +303,5 @@
      errors (exit 1 (error-msg errors)))
     ;; Execute
     (let [[chost eshost path tenant from to] arguments]
-      (run-bench chost eshost path tenant from to))))
+      (run-bench chost eshost path tenant from to)))
+  (System/exit 0))
