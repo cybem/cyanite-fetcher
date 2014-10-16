@@ -261,14 +261,23 @@
     (newline)
     fdata))
 
+(defn flatter-cleaner
+  "Flatter and clearer."
+  [data]
+  (println "Flatting and clearing data...")
+  (let [fcdata (time (doall (remove nil? (reduce into data))))]
+    (println "Number of rows:" (count fcdata))
+    (newline)
+    fcdata))
+
 (defn r-flatter-cleaner
   "Flatter and clearer based on reducers."
   [data]
   (println "Flatting and clearing data with reducers...")
-  (let [frdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
-    (println "Number of rows:" (count frdata))
+  (let [fcdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
+    (println "Number of rows:" (count fcdata))
     (newline)
-    frdata))
+    fcdata))
 
 ;;------------------------------------------------------------------------------
 ;; Data normalization
@@ -337,11 +346,13 @@
       ;;(flatter data (fn [data] (reduce into data)) "reduce")
       ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
-      (let [fcdata (r-flatter-cleaner data)]
-        (norm fcdata rollup to map (get-fill-in map) "map/map")
+      ;;(r-flatter-cleaner data)
+      (let [fcdata (flatter-cleaner data)]
+        ;;(norm fcdata rollup to map (get-fill-in map) "map/map")
         (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
-        (norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
-        (norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap"))))
+        ;;(norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
+        ;;(norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap")
+        )))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
