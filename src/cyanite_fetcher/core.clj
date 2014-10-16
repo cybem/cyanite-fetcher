@@ -92,8 +92,9 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
-(defn par-fetch [session fetch! paths tenant rollup period from to]
+(defn par-fetch
   "Fetch data in parallel fashion."
+  [session fetch! paths tenant rollup period from to]
   (let [futures
         (doall (map #(future
                        (->> (alia/execute
