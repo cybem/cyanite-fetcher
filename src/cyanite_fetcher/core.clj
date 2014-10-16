@@ -260,12 +260,47 @@
     fdata))
 
 (defn r-flatter-cleaner
+  "Flatter and clearer based on reducers."
   [data]
   (println "Flatting and clearing data with reducers...")
   (let [frdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
     (println "Number of rows:" (count frdata))
     (newline)
     frdata))
+
+;;------------------------------------------------------------------------------
+;; Data normalization
+;;------------------------------------------------------------------------------
+
+(defn fill-in
+  "Fill in fetched data with nil metrics for a given time range"
+  [nils [path data]]
+  (hash-map path
+            (->> (group-by :time data)
+                 (merge nils)
+                 (map (comp first val))
+                 (sort-by :time)
+                 (map :metric))))
+
+(defn norm
+  "Normalization."
+  [data rollup to]
+  (println "Running normalization...")
+  (let [ndata
+        (time (doall (let [min-point  (:time (first data))
+                           max-point  (-> to (quot rollup) (* rollup))
+                           nil-points (->> (range min-point (inc max-point) rollup)
+                                           (map (fn [time] {time [{:time time}]}))
+                                           (reduce merge {}))
+                           by-path    (->> (group-by :path data)
+                                           (map (partial fill-in nil-points))
+                                           (reduce merge {}))]
+                       {:from min-point
+                        :to   max-point
+                        :step rollup
+                        :series by-path})))]
+    (newline)
+    ndata))
 
 ;;------------------------------------------------------------------------------
 ;; Benchmark
@@ -298,8 +333,8 @@
       (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
       (cleaner reduce-fdata (fn [data] (remove nil? data))  "remove")
       (cleaner reduce-fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
-      (r-flatter-cleaner data)))
-
+      (let [fcdata (r-flatter-cleaner data)]
+        (norm fcdata rollup to))))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
