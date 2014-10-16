@@ -3,7 +3,6 @@
             [clojure.tools.cli :as cli]
             [clj-time.local :as tl]
             [clojure.core.reducers :as r]
-            [criterium.core :as cr]
             [clojurewerkz.elastisch.rest :as esr]
             [clojurewerkz.elastisch.rest.document :as esrd]
             [qbits.alia :as alia])
