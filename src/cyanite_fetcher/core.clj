@@ -51,6 +51,14 @@
     (newline)
     fdata))
 
+(defn r-flatter-cleaner
+  [data]
+  (println "Flatting and clearing data with reducers...")
+  (let [frdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
+    (println "Number of rows:" (count frdata))
+    (newline)
+    frdata))
+
 (defn par-fetch [session fetch! paths tenant rollup period from to]
   "Fetch data in parallel fashion."
   (let [futures
@@ -223,12 +231,14 @@
     (newline)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
-          reduce-fdata (flatter data (fn [data] (reduce into data)) "reduce")
-          rreduce-fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
-          flatten-fdata (flatter data (fn [data] (flatten data)) "flatten")
-          rflatten-fdata (flatter data (fn [data] (into [] (r/flatten data))) "r/flatten")
-          remove-cdata (cleaner reduce-fdata (fn [data] (remove nil? data))  "remove")
-          rremove-cdata (cleaner reduce-fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")]))
+          reduce-fdata (flatter data (fn [data] (reduce into data)) "reduce")]
+      (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
+      (flatter data (fn [data] (flatten data)) "flatten")
+      (flatter data (fn [data] (into [] (r/flatten data))) "r/flatten")
+      (cleaner reduce-fdata (fn [data] (remove nil? data))  "remove")
+      (cleaner reduce-fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
+      (r-flatter-cleaner data)))
+
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
