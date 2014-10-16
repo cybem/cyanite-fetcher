@@ -323,6 +323,26 @@
     (newline)
     ndata))
 
+(defn p-norm
+  "Normalization with pmap."
+  [data rollup to]
+  (println "Running normalization with pmap...")
+  (let [ndata
+        (time (doall (let [min-point  (:time (first data))
+                           max-point  (-> to (quot rollup) (* rollup))
+                           nil-points (->> (range min-point (inc max-point) rollup)
+                                           (pmap (fn [time] {time [{:time time}]}))
+                                           (reduce merge {}))
+                           by-path    (->> (group-by :path data)
+                                           (pmap (partial fill-in nil-points))
+                                           (reduce merge {}))]
+                       {:from min-point
+                        :to   max-point
+                        :step rollup
+                        :series by-path})))]
+    (newline)
+    ndata))
+
 ;;------------------------------------------------------------------------------
 ;; Benchmark
 ;;------------------------------------------------------------------------------
@@ -350,13 +370,15 @@
     (newline)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
-          fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")]
-      (flatter data (fn [data] (reduce into data)) "reduce")
-      (cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
-      (cleaner fdata (fn [data] (remove nil? data))  "remove")
+          ;;fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
+          ]
+      ;;(flatter data (fn [data] (reduce into data)) "reduce")
+      ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
+      ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
       (let [fcdata (r-flatter-cleaner data)]
         (norm fcdata rollup to)
-        (r-norm fcdata rollup to))))
+        (r-norm fcdata rollup to)
+        (p-norm fcdata rollup to))))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
