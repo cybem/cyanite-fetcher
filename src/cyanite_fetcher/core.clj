@@ -10,6 +10,66 @@
   (:gen-class))
 
 ;;------------------------------------------------------------------------------
+;; Aggregation
+;;------------------------------------------------------------------------------
+
+(defmulti aggregate-with
+  "This transforms a raw list of points according to the provided aggregation
+   method. Each point is stored as a list of data points, so multiple
+   methods make sense (max, min, mean). Additionally, a raw method is
+   provided"
+  (comp first list))
+
+(defmethod aggregate-with :mean
+  [_ {:keys [data] :as metric}]
+  (if (seq data)
+    (-> metric
+        (dissoc :data)
+        (assoc :metric (/ (reduce + 0.0 data) (count data))))
+    metric))
+
+(defmethod aggregate-with :sum
+  [_ {:keys [data] :as metric}]
+  (-> metric
+      (dissoc :data)
+      (assoc :metric (reduce + 0.0 data))))
+
+(defmethod aggregate-with :max
+  [_ {:keys [data] :as metric}]
+  (-> metric
+      (dissoc :data)
+      (assoc :metric (apply max data))))
+
+(defmethod aggregate-with :min
+  [_ {:keys [data] :as metric}]
+  (-> metric
+      (dissoc :data)
+      (assoc :metric (apply min data))))
+
+(defmethod aggregate-with :raw
+  [_ {:keys [data] :as metric}]
+  (-> metric
+      (dissoc :data)
+      (assoc :metric data)))
+
+(defmethod aggregate-with :avg
+           [_ {:keys [data] :as metric}]
+  (if (seq data)
+    (-> metric
+        (dissoc :data)
+        (assoc :metric (/ (reduce + 0.0 data) (count data))))
+    metric))
+
+;;
+;; if no method given parse metric name and select aggregation function
+;;
+(defn detect-aggregate
+  [{:keys [path] :as metric}]
+  (if-let [[_ m] (re-find #"^(sum|avg|mean|min|max|raw)\..*" path)]
+    (aggregate-with (keyword m) metric)
+    (aggregate-with :mean metric)))
+
+;;------------------------------------------------------------------------------
 ;; Cassandra
 ;;------------------------------------------------------------------------------
 
@@ -43,7 +103,7 @@
                                        (int period)
                                        from to]
                               :fetch-size Integer/MAX_VALUE})
-                            ;;(map detect-aggregate)
+                            (map detect-aggregate)
                             (seq)))
                     paths))]
     (map deref futures)))
