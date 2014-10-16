@@ -102,7 +102,8 @@
                                              (int period)
                                              from to]
                                     :fetch-size Integer/MAX_VALUE})]
-                         (->> (doall (map detect-aggregate data))
+                         (->> (doall data)
+                              (map detect-aggregate)
                               (seq))))
                     paths))]
     (map deref futures)))
