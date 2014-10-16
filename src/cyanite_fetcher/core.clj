@@ -228,7 +228,7 @@
           flatten-fdata (flatter data (fn [data] (flatten data)) "flatten")
           rflatten-fdata (flatter data (fn [data] (into [] (r/flatten data))) "r/flatten")
           remove-cdata (cleaner reduce-fdata (fn [data] (remove nil? data))  "remove")
-          rremove-cdata (cleaner reduce-fdata (fn [data] (r/remove nil? data)) "r/remove")]))
+          rremove-cdata (cleaner reduce-fdata (fn [data] (into [] r/remove nil? data)) "r/remove")]))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
