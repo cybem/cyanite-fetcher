@@ -33,32 +33,6 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
-(defn cleaner
-  "Cleaner."
-  [data f name]
-  (println (format "Cleaning data with %s..." name))
-  (let [cdata (time (doall (f data)))]
-    (println "Number of rows:" (count cdata))
-    (newline)
-    cdata))
-
-(defn flatter
-  "Flatter."
-  [data f name]
-  (println (format "Flatting data with %s..." name))
-  (let [fdata (time (doall (f data)))]
-    (println "Number of rows:" (count fdata))
-    (newline)
-    fdata))
-
-(defn r-flatter-cleaner
-  [data]
-  (println "Flatting and clearing data with reducers...")
-  (let [frdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
-    (println "Number of rows:" (count frdata))
-    (newline)
-    frdata))
-
 (defn par-fetch [session fetch! paths tenant rollup period from to]
   "Fetch data in parallel fashion."
   (let [futures
@@ -203,6 +177,36 @@
                  (and (>= (Long/parseLong from) (- (now) (* rollup period)))
                       rollup-def))]
     (some within (sort-by :rollup rollups))))
+
+;;------------------------------------------------------------------------------
+;; Data algorithms
+;;------------------------------------------------------------------------------
+
+(defn cleaner
+  "Cleaner."
+  [data f name]
+  (println (format "Cleaning data with %s..." name))
+  (let [cdata (time (doall (f data)))]
+    (println "Number of rows:" (count cdata))
+    (newline)
+    cdata))
+
+(defn flatter
+  "Flatter."
+  [data f name]
+  (println (format "Flatting data with %s..." name))
+  (let [fdata (time (doall (f data)))]
+    (println "Number of rows:" (count fdata))
+    (newline)
+    fdata))
+
+(defn r-flatter-cleaner
+  [data]
+  (println "Flatting and clearing data with reducers...")
+  (let [frdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
+    (println "Number of rows:" (count frdata))
+    (newline)
+    frdata))
 
 ;;------------------------------------------------------------------------------
 ;; Benchmark
