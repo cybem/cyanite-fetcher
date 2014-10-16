@@ -33,20 +33,11 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
-(defn remove-cleaner
-  "Remove cleaner."
-  [data]
-  (println "Cleaning data with remove cleaner...")
-  (let [cdata (time (doall (remove nil? data)))]
-    (println "Number of rows:" (count cdata))
-    (println)
-    cdata))
-
-(defn rremove-cleaner
-  "R/remove cleaner."
-  [data]
-  (println "Cleaning data with r/remove cleaner...")
-  (let [cdata (time (doall (into [] (r/remove nil? data))))]
+(defn cleaner
+  "Cleaner."
+  [data f name]
+  (println (format "Cleaning data with %s..." name))
+  (let [cdata (time (doall (f data)))]
     (println "Number of rows:" (count cdata))
     (println)
     cdata))
@@ -236,8 +227,8 @@
           rreduce-fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
           flatten-fdata (flatter data (fn [data] (flatten data)) "flatten")
           rflatten-fdata (flatter data (fn [data] (into [] (r/flatten data))) "r/flatten")
-          remove-cdata (remove-cleaner reduce-fdata)
-          rremove-cdata (rremove-cleaner reduce-fdata)]))
+          remove-cdata (cleaner (fn [data] (remove nil? data)) reduce-fdata "remove")
+          rremove-cdata (cleaner (fn [data] (r/remove nil? data)) reduce-fdata)]) "r/remove")
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
