@@ -96,15 +96,15 @@
   "Fetch data in parallel fashion."
   (let [futures
         (doall (map #(future
-                       (let [data (alia/execute
-                                   session fetch!
-                                   {:values [% tenant (int rollup)
-                                             (int period)
-                                             from to]
-                                    :fetch-size Integer/MAX_VALUE})]
-                         (->> (doall data)
-                              (map detect-aggregate)
-                              (seq))))
+                       (->> (alia/execute
+                             session fetch!
+                             {:values [% tenant (int rollup)
+                                       (int period)
+                                       from to]
+                              :fetch-size Integer/MAX_VALUE})
+                            (map detect-aggregate)
+                            (doall)
+                            (seq)))
                     paths))]
     (map deref futures)))
 
