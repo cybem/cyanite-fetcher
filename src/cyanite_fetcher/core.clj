@@ -33,16 +33,16 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
-(defn std-cleaner
-  "Standard cleaner."
+(defn remove-cleaner
+  "Remove cleaner."
   [data]
-  (println "Cleaning data with standard cleaner...")
+  (println "Cleaning data with remove cleaner...")
   (let [cdata (time (doall (remove nil? data)))]
     (println "Number of rows:" (count cdata))
     (println)
     cdata))
 
-(defn r-cleaner
+(defn rremove-cleaner
   "R/remove cleaner."
   [data]
   (println "Cleaning data with r/remove cleaner...")
@@ -51,32 +51,41 @@
     (println)
     cdata))
 
-(defn std-reducer
-  "Standard reducer."
+(defn reduce-flatter
+  "Reduce flatter."
   [data]
-  (println "Reducing data with standard reducer...")
-  (let [rdata (time (doall (reduce into data)))]
-    (println "Number of rows:" (count rdata))
+  (println "Flatting data with reduce...")
+  (let [fdata (time (doall (reduce into data)))]
+    (println "Number of rows:" (count fdata))
     (println)
-    rdata))
+    fdata))
 
-(defn flatten-reducer
-  "Flatten reducer."
+(defn rreduce-flatter
+  "R/reduce flatter."
   [data]
-  (println "Reducing data with flatten reducer...")
-  (let [rdata (time (doall (flatten data)))]
-    (println "Number of rows:" (count rdata))
+  (println "Flatting data with r/reduce...")
+  (let [fdata (time (doall (r/reduce into [] data)))]
+    (println "Number of rows:" (count fdata))
     (println)
-    rdata))
+    fdata))
 
-(defn rflatten-reducer
-  "R/flatten reducer."
+(defn flatten-flatter
+  "Flatten flatter."
   [data]
-  (println "Reducing data with r/flatten reducer...")
-  (let [rdata (time (doall (into [] (r/flatten data))))]
-    (println "Number of rows:" (count rdata))
+  (println "Flatting data with flatten...")
+  (let [fdata (time (doall (flatten data)))]
+    (println "Number of rows:" (count fdata))
     (println)
-    rdata))
+    fdata))
+
+(defn rflatten-flatter
+  "R/flatten flatter."
+  [data]
+  (println "Flatting data with r/flatten...")
+  (let [fdata (time (doall (into [] (r/flatten data))))]
+    (println "Number of rows:" (count fdata))
+    (println)
+    fdata))
 
 (defn par-fetch [session fetch! paths tenant rollup period from to]
   "Fetch data in parallel fashion."
@@ -250,11 +259,12 @@
     (println)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
-          std-rdata (std-reducer data)
-          flatten-rdata (flatten-reducer data)
-          rflatten-rdata (rflatten-reducer data)
-          std-cdata (std-cleaner std-rdata)
-          r-cdata (r-cleaner std-rdata)]))
+          reduce-fdata (reduce-flatter data)
+          rreduce-fdata (rreduce-flatter data)
+          flatten-fdata (flatten-flatter data)
+          rflatten-fdata (rflatten-flatter data)
+          remove-cdata (remove-cleaner reduce-fdata)
+          rremove-cdata (rremove-cleaner reduce-fdata)]))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
