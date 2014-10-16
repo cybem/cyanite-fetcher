@@ -39,7 +39,7 @@
   (println (format "Cleaning data with %s..." name))
   (let [cdata (time (doall (f data)))]
     (println "Number of rows:" (count cdata))
-    (println)
+    (newline)
     cdata))
 
 (defn flatter
@@ -48,7 +48,7 @@
   (println (format "Flatting data with %s..." name))
   (let [fdata (time (doall (f data)))]
     (println "Number of rows:" (count fdata))
-    (println)
+    (newline)
     fdata))
 
 (defn par-fetch [session fetch! paths tenant rollup period from to]
@@ -75,7 +75,7 @@
     (println "Getting data form Cassandra...")
     (let [data (time (doall (par-fetch session fetch! paths tenant rollup
                                        period from to)))]
-      (println)
+      (newline)
       data)))
 
 ;;------------------------------------------------------------------------------
@@ -141,7 +141,7 @@
   (println "Getting paths form ElasticSearch...")
   (let [paths (time (doall (lookup host tenant path)))]
     (println "Number of paths:" (count paths))
-    (println)
+    (newline)
     paths))
 
 ;;------------------------------------------------------------------------------
@@ -209,18 +209,18 @@
         tenant (or tenant "NONE")
         to (if to (Long/parseLong (str to)) (now))
         from (Long/parseLong (str from))]
-    (println)
+    (newline)
     (println "Cassandra host:    " chost)
     (println "ElasticSearch host:" eshost)
-    (println)
+    (newline)
     (println "Path:  " path)
     (println "Tenant:" tenant)
     (println "From:  " from)
     (println "To:    " to)
-    (println)
+    (newline)
     (println "Rollup:" rollup)
     (println "Period:" period)
-    (println)
+    (newline)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
           reduce-fdata (flatter data (fn [data] (reduce into data)) "reduce")
