@@ -302,6 +302,26 @@
     (newline)
     ndata))
 
+(defn r-norm
+  "Normalization with reducers."
+  [data rollup to]
+  (println "Running normalization with reducers...")
+  (let [ndata
+        (time (doall (let [min-point  (:time (first data))
+                           max-point  (-> to (quot rollup) (* rollup))
+                           nil-points (->> (range min-point (inc max-point) rollup)
+                                           (r/map (fn [time] {time [{:time time}]}))
+                                           (r/reduce merge {}))
+                           by-path    (->> (group-by :path data)
+                                           (r/map (partial fill-in nil-points))
+                                           (r/reduce merge {}))]
+                       {:from min-point
+                        :to   max-point
+                        :step rollup
+                        :series by-path})))]
+    (newline)
+    ndata))
+
 ;;------------------------------------------------------------------------------
 ;; Benchmark
 ;;------------------------------------------------------------------------------
@@ -329,12 +349,14 @@
     (newline)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data chost paths tenant rollup period from to)
-          reduce-fdata (flatter data (fn [data] (reduce into data)) "reduce")]
+          fdata (flatter data (fn [data] (r/reduce into [] data)) "warming r/reduce")]
       (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
-      (cleaner reduce-fdata (fn [data] (remove nil? data))  "remove")
-      (cleaner reduce-fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
+      (flatter data (fn [data] (reduce into data)) "reduce")
+      (cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
+      (cleaner fdata (fn [data] (remove nil? data))  "remove")
       (let [fcdata (r-flatter-cleaner data)]
-        (norm fcdata rollup to))))
+        (norm fcdata rollup to)
+        (r-norm fcdata rollup to))))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
