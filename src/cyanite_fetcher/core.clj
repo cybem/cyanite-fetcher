@@ -273,68 +273,29 @@
 ;; Data normalization
 ;;------------------------------------------------------------------------------
 
-(defn fill-in
+(defn get-fill-in [f-map]
+  (defn fill-in
   "Fill in fetched data with nil metrics for a given time range"
   [nils [path data]]
   (hash-map path
             (->> (group-by :time data)
                  (merge nils)
-                 (map (comp first val))
+                 (f-map (comp first val))
                  (sort-by :time)
-                 (map :metric))))
+                 (f-map :metric)))))
 
 (defn norm
   "Normalization."
-  [data rollup to]
-  (println "Running normalization...")
+  [data rollup to f-map f-fill-in name]
+  (println (format "Running normalization (%s)..." name))
   (let [ndata
         (time (doall (let [min-point  (:time (first data))
                            max-point  (-> to (quot rollup) (* rollup))
                            nil-points (->> (range min-point (inc max-point) rollup)
-                                           (map (fn [time] {time [{:time time}]}))
+                                           (f-map (fn [time] {time [{:time time}]}))
                                            (reduce merge {}))
                            by-path    (->> (group-by :path data)
-                                           (map (partial fill-in nil-points))
-                                           (reduce merge {}))]
-                       {:from min-point
-                        :to   max-point
-                        :step rollup
-                        :series by-path})))]
-    (newline)
-    ndata))
-
-(defn r-norm
-  "Normalization with reducers."
-  [data rollup to]
-  (println "Running normalization with reducers...")
-  (let [ndata
-        (time (doall (let [min-point  (:time (first data))
-                           max-point  (-> to (quot rollup) (* rollup))
-                           nil-points (->> (range min-point (inc max-point) rollup)
-                                           (r/map (fn [time] {time [{:time time}]}))
-                                           (r/reduce merge {}))
-                           by-path    (->> (group-by :path data)
-                                           (r/map (partial fill-in nil-points))
-                                           (r/reduce merge {}))]
-                       {:from min-point
-                        :to   max-point
-                        :step rollup
-                        :series by-path})))]
-    (newline)
-    ndata))
-
-(defn p-norm
-  "Normalization with pmap."
-  [data rollup to]
-  (println "Running normalization with pmap...")
-  (let [ndata
-        (time (doall (let [min-point  (:time (first data))
-                           max-point  (-> to (quot rollup) (* rollup))
-                           nil-points (->> (range min-point (inc max-point) rollup)
-                                           (pmap (fn [time] {time [{:time time}]}))
-                                           (reduce merge {}))
-                           by-path    (->> (group-by :path data)
-                                           (pmap (partial fill-in nil-points))
+                                           (f-map (partial f-fill-in nil-points))
                                            (reduce merge {}))]
                        {:from min-point
                         :to   max-point
@@ -376,9 +337,10 @@
       ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
       (let [fcdata (r-flatter-cleaner data)]
-        (norm fcdata rollup to)
-        (r-norm fcdata rollup to)
-        (p-norm fcdata rollup to))))
+        (norm fcdata rollup to map (get-fill-in map) "map/map")
+        (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
+        (norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
+        (norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap"))))
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
 ;;------------------------------------------------------------------------------
