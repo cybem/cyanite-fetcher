@@ -109,6 +109,20 @@
                     paths))]
     (map deref futures)))
 
+(defn par-fetch-pmap
+  "Fetch data in parallel fashion using pmap."
+  [session fetch! paths tenant rollup period from to]
+
+  (pmap (fn [path] (->> (alia/execute
+                         session fetch!
+                         {:values [path tenant (int rollup)
+                                   (int period)
+                                   from to]
+                          :fetch-size Integer/MAX_VALUE})
+                        (map detect-aggregate)
+                        (doall)
+                        (seq))) paths))
+
 (defn c-get-data
   "Get data from C*."
   [host paths tenant rollup period from to]
@@ -116,8 +130,8 @@
                     (alia/connect keyspace))
         fetch! (fetchq session)]
     (println "Getting data form Cassandra...")
-    (let [data (time (doall (par-fetch session fetch! paths tenant rollup
-                                       period from to)))]
+    (let [data (time (doall (par-fetch session fetch! paths tenant
+                                       rollup period from to)))]
       (newline)
       data)))
 
