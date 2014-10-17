@@ -97,22 +97,25 @@
   [session fetch! paths tenant rollup period from to]
   (let [futures
         (doall (map #(future
-                       (->> (alia/execute
-                             session fetch!
-                             {:values [% tenant (int rollup)
-                                       (int period)
-                                       from to]
-                              :fetch-size Integer/MAX_VALUE})
-                            (map detect-aggregate)
-                            (doall)
-                            (seq)))
+                       (try
+                         (->> (alia/execute
+                               session fetch!
+                               {:values [% tenant (int rollup)
+                                         (int period)
+                                         from to]
+                                :fetch-size Integer/MAX_VALUE})
+                              (map detect-aggregate)
+                              (doall)
+                              (seq))
+                         (catch Exception e
+                           (shutdown-agents)
+                           (throw e))))
                     paths))]
     (map deref futures)))
 
 (defn par-fetch-pmap
   "Fetch data in parallel fashion using pmap."
   [session fetch! paths tenant rollup period from to]
-
   (pmap (fn [path] (->> (alia/execute
                          session fetch!
                          {:values [path tenant (int rollup)
@@ -126,19 +129,15 @@
 (defn c-get-data
   "Get data from C*."
   [host paths tenant rollup period from to]
-  (try
-    (println "Connecting to Cassandra...")
-    (let [session (-> (alia/cluster {:contact-points [host]})
-                      (alia/connect keyspace))
-          fetch! (fetchq session)]
-      (println "Getting data form Cassandra...")
-      (let [data (time (doall (par-fetch-pmap session fetch! paths tenant
-                                              rollup period from to)))]
-        (newline)
-        data))
-    (catch Exception e
-      (shutdown-agents)
-      (throw e))))
+  (println "Connecting to Cassandra...")
+  (let [session (-> (alia/cluster {:contact-points [host]})
+                    (alia/connect keyspace))
+        fetch! (fetchq session)]
+    (println "Getting data form Cassandra...")
+    (let [data (time (doall (par-fetch session fetch! paths tenant
+                                       rollup period from to)))]
+      (newline)
+      data)))
 
 ;;------------------------------------------------------------------------------
 ;; ElasticSearch
@@ -376,7 +375,11 @@
   [chost eshost path tenant from to]
   (println "Start time:" (tl/format-local-time (tl/local-now) :rfc822))
   (newline)
-  (time (bench-itself chost eshost path tenant from to))
+  (try
+    (time (bench-itself chost eshost path tenant from to))
+    (catch Exception e
+      (shutdown-agents)
+      (throw e)))
   (newline)
   (println "Finish time:" (tl/format-local-time (tl/local-now) :rfc822)))
 
