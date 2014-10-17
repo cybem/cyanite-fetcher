@@ -126,14 +126,19 @@
 (defn c-get-data
   "Get data from C*."
   [host paths tenant rollup period from to]
-  (let [session (-> (alia/cluster {:contact-points [host]})
-                    (alia/connect keyspace))
-        fetch! (fetchq session)]
-    (println "Getting data form Cassandra...")
-    (let [data (time (doall (par-fetch session fetch! paths tenant
-                                       rollup period from to)))]
-      (newline)
-      data)))
+  (try
+    (println "Connecting to Cassandra...")
+    (let [session (-> (alia/cluster {:contact-points [host]})
+                      (alia/connect keyspace))
+          fetch! (fetchq session)]
+      (println "Getting data form Cassandra...")
+      (let [data (time (doall (par-fetch-pmap session fetch! paths tenant
+                                              rollup period from to)))]
+        (newline)
+        data))
+    (catch Exception e
+      (shutdown-agents)
+      (throw e))))
 
 ;;------------------------------------------------------------------------------
 ;; ElasticSearch
