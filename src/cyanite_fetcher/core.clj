@@ -363,7 +363,7 @@
       ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
       ;;(r-flatter-cleaner data)
-      (let [fcdata (flatter-cleaner data)]
+      (let [fcdata (r-flatter-cleaner data)]
         ;;(norm fcdata rollup to map (get-fill-in map) "map/map")
         (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
         ;;(norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
