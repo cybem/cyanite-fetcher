@@ -262,18 +262,18 @@
     fdata))
 
 (defn flatter-cleaner
-  "Flatter and clearer."
+  "Flatter and cleaner."
   [data]
-  (println "Flatting and clearing data...")
+  (println "Flatting and cleaning data...")
   (let [fcdata (time (doall (remove nil? (reduce into data))))]
     (println "Number of rows:" (count fcdata))
     (newline)
     fcdata))
 
 (defn r-flatter-cleaner
-  "Flatter and clearer based on reducers."
+  "Flatter and cleaner based on reducers."
   [data]
-  (println "Flatting and clearing data with reducers...")
+  (println "Flatting and cleaning data with reducers...")
   (let [fcdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
     (println "Number of rows:" (count fcdata))
     (newline)
