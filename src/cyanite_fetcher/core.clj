@@ -170,10 +170,13 @@
        (if (empty? queries)
          query-results
          (let [[result channel] (async/alts! queries)]
-           ;;(println (count queries))
            (recur
-            (rest queries)
-            (into query-results result))))))))
+            (remove #{channel} queries)
+            (->> result
+                 (map detect-aggregate)
+                 (doall)
+                 (seq)
+                 (into query-results)))))))))
 
 (defn c-get-data
   "Get data from C*."
@@ -188,9 +191,8 @@
                                            rollup period from to)))]
         (newline)
         data)
-      (catch Exception e
-        (alia/shutdown cluster)
-        (throw e)))))
+      (finally
+        (alia/shutdown cluster)))))
 
 ;;------------------------------------------------------------------------------
 ;; ElasticSearch
@@ -410,9 +412,9 @@
     (newline)
     (let [paths (es-get-paths eshost path tenant)
           data (c-get-data par-fetch "par-fetch" chost paths tenant rollup period from to)
+          ;;data (c-get-data par-fetch-chan "par-fetch-chan" chost paths tenant rollup period from to)
           ;;fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
           ]
-      (c-get-data par-fetch-async "par-fetch-async" chost paths tenant rollup period from to)
       ;;(flatter data (fn [data] (reduce into data)) "reduce")
       ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
