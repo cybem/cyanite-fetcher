@@ -182,7 +182,9 @@
   "Get data from C*."
   [f-par-fetch n-par-fetch host paths tenant rollup period from to]
   (println "Connecting to Cassandra...")
-  (let [cluster (alia/cluster {:contact-points [host]})
+  (let [cluster (alia/cluster {:contact-points [host]
+                               :pooling-options {:max-connections-per-host {:local 8192
+                                                                            :remote 8192}}})
         session (alia/connect cluster keyspace)
         fetch! (fetchq session)]
     (println (format "Getting data form Cassandra using %s..." n-par-fetch))
