@@ -148,14 +148,18 @@
   "Get data from C*."
   [host paths tenant rollup period from to]
   (println "Connecting to Cassandra...")
-  (let [session (-> (alia/cluster {:contact-points [host]})
-                    (alia/connect keyspace))
+  (let [cluster (alia/cluster {:contact-points [host]})
+        session (alia/connect keyspace cluster)
         fetch! (fetchq session)]
     (println "Getting data form Cassandra...")
-    (let [data (time (doall (par-fetch session fetch! paths tenant
-                                       rollup period from to)))]
-      (newline)
-      data)))
+    (try
+      (let [data (time (doall (par-fetch session fetch! paths tenant
+                                         rollup period from to)))]
+        (newline)
+        data)
+      (catch Exception e
+        (alia/shutdown cluster)
+        (throw e)))))
 
 ;;------------------------------------------------------------------------------
 ;; ElasticSearch
