@@ -3,6 +3,7 @@
             [clojure.tools.cli :as cli]
             [clj-time.local :as tl]
             [clojure.core.reducers :as r]
+            [clojure.core.async :as async]
             [clojurewerkz.elastisch.rest :as esr]
             [clojurewerkz.elastisch.rest.document :as esrd]
             [qbits.alia :as alia])
@@ -153,14 +154,35 @@
     (map my-deref channels)
     @data))
 
+(defn par-fetch-chan
+  "Fetch data in parallel fashion using execute-chan."
+  [session fetch! paths tenant rollup period from to]
+  (async/<!!
+   (async/go
+     (loop [queries
+            (map #(alia/execute-chan session fetch!
+                                     {:values [% tenant (int rollup)
+                                               (int period)
+                                               from to]
+                                      :fetch-size Integer/MAX_VALUE})
+                 paths)
+            query-results []]
+       (if (empty? queries)
+         query-results
+         (let [[result channel] (async/alts! queries)]
+           ;;(println (count queries))
+           (recur
+            (rest queries)
+            (into query-results result))))))))
+
 (defn c-get-data
   "Get data from C*."
-  [f-par-fetch host paths tenant rollup period from to]
+  [f-par-fetch n-par-fetch host paths tenant rollup period from to]
   (println "Connecting to Cassandra...")
   (let [cluster (alia/cluster {:contact-points [host]})
         session (alia/connect cluster keyspace)
         fetch! (fetchq session)]
-    (println "Getting data form Cassandra...")
+    (println (format "Getting data form Cassandra using %s..." n-par-fetch))
     (try
       (let [data (time (doall (f-par-fetch session fetch! paths tenant
                                            rollup period from to)))]
@@ -387,9 +409,10 @@
     (println "Period:" period)
     (newline)
     (let [paths (es-get-paths eshost path tenant)
-          data (c-get-data par-fetch chost paths tenant rollup period from to)
+          data (c-get-data par-fetch "par-fetch" chost paths tenant rollup period from to)
           ;;fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
           ]
+      (c-get-data par-fetch-async "par-fetch-async" chost paths tenant rollup period from to)
       ;;(flatter data (fn [data] (reduce into data)) "reduce")
       ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
       ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
