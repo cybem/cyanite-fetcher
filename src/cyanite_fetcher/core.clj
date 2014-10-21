@@ -148,15 +148,15 @@
 
 (defn c-get-data
   "Get data from C*."
-  [host paths tenant rollup period from to]
+  [f-par-fetch host paths tenant rollup period from to]
   (println "Connecting to Cassandra...")
   (let [cluster (alia/cluster {:contact-points [host]})
         session (alia/connect keyspace cluster)
         fetch! (fetchq session)]
     (println "Getting data form Cassandra...")
     (try
-      (let [data (time (doall (par-fetch session fetch! paths tenant
-                                         rollup period from to)))]
+      (let [data (time (doall (f-par-fetch session fetch! paths tenant
+                                           rollup period from to)))]
         (newline)
         data)
       (catch Exception e
@@ -380,7 +380,7 @@
     (println "Period:" period)
     (newline)
     (let [paths (es-get-paths eshost path tenant)
-          data (c-get-data chost paths tenant rollup period from to)
+          data (c-get-data par-fetch chost paths tenant rollup period from to)
           ;;fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
           ]
       ;;(flatter data (fn [data] (reduce into data)) "reduce")
