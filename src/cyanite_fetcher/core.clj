@@ -130,17 +130,19 @@
   "Fetch data in parallel fashion using execute-async."
   [session fetch! paths tenant rollup period from to]
   (let [data (atom [])
-        channels (doall (map #(alia/execute-async session fetch!
-                                                  {:values [% tenant (int rollup)
-                                                            (int period)
-                                                            from to]
-                                                   :fetch-size Integer/MAX_VALUE
-                                                   :success (fn [rows]
-                                                              (->> rows
-                                                                   (map detect-aggregate)
-                                                                   (doall)
-                                                                   (seq)
-                                                                   (swap! data conj)))}) paths))]
+        channels
+        (doall (map #(alia/execute-async session fetch!
+                                         {:values [% tenant (int rollup)
+                                                   (int period)
+                                                   from to]
+                                          :fetch-size Integer/MAX_VALUE
+                                          :success (fn [rows]
+                                                     (->> rows
+                                                          (map detect-aggregate)
+                                                          (doall)
+                                                          (seq)
+                                                          (swap! data conj)))})
+                    paths))]
     (map deref channels)
     @data))
 
