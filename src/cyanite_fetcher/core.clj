@@ -92,6 +92,13 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
+(defn my-deref
+  [f]
+  (let [result (deref f 300000 :timeout)]
+    (when (= result :timeout)
+      (throw (ex-info "Too long!" {})))
+    result))
+
 (defn par-fetch
   "Fetch data in parallel fashion."
   [session fetch! paths tenant rollup period from to]
@@ -111,7 +118,7 @@
                            (shutdown-agents)
                            (throw e))))
                     paths))]
-    (map deref futures)))
+    (map my-deref futures)))
 
 (defn par-fetch-pmap
   "Fetch data in parallel fashion using pmap."
@@ -143,7 +150,7 @@
                                                           (seq)
                                                           (swap! data conj)))})
                     paths))]
-    (map deref channels)
+    (map my-deref channels)
     @data))
 
 (defn c-get-data
@@ -151,7 +158,7 @@
   [f-par-fetch host paths tenant rollup period from to]
   (println "Connecting to Cassandra...")
   (let [cluster (alia/cluster {:contact-points [host]})
-        session (alia/connect keyspace cluster)
+        session (alia/connect cluster keyspace)
         fetch! (fetchq session)]
     (println "Getting data form Cassandra...")
     (try
