@@ -10,6 +10,18 @@
   (:gen-class))
 
 ;;------------------------------------------------------------------------------
+;; Utils
+;;------------------------------------------------------------------------------
+
+(defn print-nitems
+  "Print number of items."
+  [data]
+  (let [nitems (count data)]
+    (println "Number of items:" nitems)
+    (when (<= nitems 20)
+      (println "Data:" data))))
+
+;;------------------------------------------------------------------------------
 ;; Aggregation
 ;;------------------------------------------------------------------------------
 
@@ -323,7 +335,7 @@
   [data f name]
   (println (format "Cleaning data with %s..." name))
   (let [cdata (time (doall (f data)))]
-    (println "Number of rows:" (count cdata))
+    (print-nitems cdata)
     (newline)
     cdata))
 
@@ -332,7 +344,7 @@
   [data f name]
   (println (format "Flatting data with %s..." name))
   (let [fdata (time (doall (f data)))]
-    (println "Number of rows:" (count fdata))
+    (print-nitems fdata)
     (newline)
     fdata))
 
@@ -341,7 +353,7 @@
   [data]
   (println "Flatting and cleaning data...")
   (let [fcdata (time (doall (remove nil? (reduce into data))))]
-    (println "Number of rows:" (count fcdata))
+    (print-nitems fcdata)
     (newline)
     fcdata))
 
@@ -350,7 +362,7 @@
   [data]
   (println "Flatting and cleaning data with reducers...")
   (let [fcdata (time (doall (into [] (r/remove nil? (r/reduce into [] data)))))]
-    (println "Number of rows:" (count fcdata))
+    (print-nitems fcdata)
     (newline)
     fcdata))
 
@@ -386,8 +398,38 @@
                         :to   max-point
                         :step rollup
                         :series by-path})))]
+    (print-nitems (:series ndata))
     (newline)
     ndata))
+
+
+(defn new-norm
+  "New normalization."
+  [paths data rollup to name]
+  (println (format "Running new normalization (%s)..." name))
+  (let [ndata
+        (time (doall (let [min-point  (:time (first data))
+                           max-point  (-> to (quot rollup) (* rollup))
+                           points (range min-point (inc max-point) rollup)
+                           dmap (reduce (fn [m e]
+                                          (let [path (hash (:path e))
+                                                time (:time e)
+                                                metric (:metric e)]
+                                            (assoc m path (assoc (get m path {}) time metric))))
+                                        {} data)
+                           metrics (pmap (fn [path]
+                                           (let [h-path (hash path)
+                                                 serie (get dmap h-path)]
+                                             (map #(get serie % nil) points)))
+                                         paths)
+                           series (zipmap paths metrics)]
+                       {:from min-point
+                        :to   max-point
+                        :step rollup
+                        :series series})))]
+    (print-nitems (:series ndata))
+    (newline)))
+
 
 ;;------------------------------------------------------------------------------
 ;; Benchmark
@@ -426,6 +468,7 @@
         (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
         ;;(norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
         ;;(norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap")
+        (new-norm paths fcdata rollup to "primal")
         ))))
 
 (defn run-bench
