@@ -105,6 +105,24 @@
     "path = ? AND tenant = ? AND rollup = ? AND period = ? "
     "AND time >= ? AND time <= ? ORDER BY time ASC;")))
 
+(defn fetchq-unordered
+  "Yields a cassandra prepared statement of 7 arguments:
+
+* `paths`: list of paths
+* `tenant`: tenant identifier
+* `rollup`: interval between points at this resolution
+* `period`: rollup multiplier which determines the time to keep points for
+* `min`: return points starting from this timestamp
+* `max`: return points up to this timestamp
+* `limit`: maximum number of points to return"
+  [session]
+  (alia/prepare
+   session
+   (str
+    "SELECT data,time FROM metric WHERE "
+    "path = ? AND tenant = ? AND rollup = ? AND period = ? "
+    "AND time >= ? AND time <= ?;")))
+
 (defn my-deref
   [f]
   (let [result (deref f 300000 :timeout)]
@@ -190,15 +208,38 @@
                  (seq)
                  (into query-results)))))))))
 
+(defn par-fetch-new
+  "Fetch data in parallel fashion."
+  [session fetch! paths tenant rollup period from to]
+  (let [futures
+        (doall (map #(future
+                       (try
+                         (let [data
+                               (->> (alia/execute
+                                     session fetch!
+                                     {:values [% tenant (int rollup)
+                                               (int period)
+                                               from to]
+                                      :fetch-size Integer/MAX_VALUE})
+                                    ;;(map detect-aggregate)
+                                    ;;(doall)
+                                    (seq))]
+                           {:path % :data data})
+                         (catch Exception e
+                           (shutdown-agents)
+                           (throw e))))
+                    paths))]
+    (map my-deref futures)))
+
 (defn c-get-data
   "Get data from C*."
-  [f-par-fetch n-par-fetch host paths tenant rollup period from to]
+  [cfetch f-par-fetch n-par-fetch host paths tenant rollup period from to]
   (println "Connecting to Cassandra...")
   (let [cluster (alia/cluster {:contact-points [host]
                                :pooling-options {:max-connections-per-host {:local 8192
                                                                             :remote 8192}}})
         session (alia/connect cluster keyspace)
-        fetch! (fetchq session)]
+        fetch! (cfetch session)]
     (println (format "Getting data form Cassandra using %s..." n-par-fetch))
     (try
       (let [data (time (doall (f-par-fetch session fetch! paths tenant
@@ -430,10 +471,70 @@
     (print-nitems (:series ndata))
     (newline)))
 
+(defn do-series
+  [points path-data]
+  (let [path (:path path-data)
+        data (:data path-data)]
+    (if data
+      (let [time-map (reduce (fn [acc el]
+                               (let [time (:time el)
+                                     metric (:metric el)]
+                                 (assoc acc time metric)))
+                             {} data)
+            time-series (map #(get time-map % nil) points)]
+        {path time-series})
+      {})))
+
+(defn new-norm2
+  "New normalization."
+  [paths data rollup from to name]
+  (println (format "Running new normalization (%s)..." name))
+  (let [ndata
+        (time (doall (let [min-point  (-> from (quot rollup) (* rollup))
+                           max-point  (-> to (quot rollup) (* rollup))
+                           points (range min-point (inc max-point) rollup)
+                           paths-series (pmap (partial do-series points) data)
+                           series (reduce merge paths-series)]
+                       {:from min-point
+                        :to   max-point
+                        :step rollup
+                        :series series})))]
+    (print-nitems (:series ndata))
+    (newline)))
 
 ;;------------------------------------------------------------------------------
 ;; Benchmark
 ;;------------------------------------------------------------------------------
+
+(defn bench-old-fetcher
+  "Old fetcher benchmark."
+  [chost paths tenant rollup period from to]
+  (println "Running old data fetcher...")
+  (let [data (c-get-data fetchq par-fetch "par-fetch" chost paths tenant rollup period from to)
+        ;;data (c-get-data par-fetch-chan "par-fetch-chan" chost paths tenant rollup period from to)
+        ;;fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
+        ]
+    ;;(flatter data (fn [data] (reduce into data)) "reduce")
+    ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
+    ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
+    ;;(r-flatter-cleaner data)
+    (let [fcdata (r-flatter-cleaner data)]
+      ;;(norm fcdata rollup to map (get-fill-in map) "map/map")
+      (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
+      ;;(norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
+      ;;(norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap")
+      ;;(new-norm paths fcdata rollup to "primal")
+      ))
+  (newline))
+
+(defn bench-new-fetcher
+  "New fetcher benchmark."
+  [chost paths tenant rollup period from to]
+  (println "Running new data fetcher...")
+  (let [data (c-get-data fetchq-unordered par-fetch-new "par-fetch" chost paths tenant rollup period from to)]
+    (new-norm2 paths data rollup from to "primal")
+    )
+  (newline))
 
 (defn bench-itself
   "Benchmark itself."
@@ -454,22 +555,10 @@
     (println "Rollup:" rollup)
     (println "Period:" period)
     (newline)
-    (let [paths (es-get-paths eshost path tenant)
-          data (c-get-data par-fetch "par-fetch" chost paths tenant rollup period from to)
-          ;;data (c-get-data par-fetch-chan "par-fetch-chan" chost paths tenant rollup period from to)
-          ;;fdata (flatter data (fn [data] (r/reduce into [] data)) "r/reduce")
-          ]
-      ;;(flatter data (fn [data] (reduce into data)) "reduce")
-      ;;(cleaner fdata (fn [data] (into [] (r/remove nil? data))) "r/remove")
-      ;;(cleaner fdata (fn [data] (remove nil? data))  "remove")
-      ;;(r-flatter-cleaner data)
-      (let [fcdata (r-flatter-cleaner data)]
-        ;;(norm fcdata rollup to map (get-fill-in map) "map/map")
-        (norm fcdata rollup to pmap (get-fill-in map) "pmap/map")
-        ;;(norm fcdata rollup to map (get-fill-in pmap) "map/pmap")
-        ;;(norm fcdata rollup to pmap (get-fill-in pmap) "pmap/pmap")
-        (new-norm paths fcdata rollup to "primal")
-        ))))
+    (let [paths (es-get-paths eshost path tenant)]
+      ;;(time (bench-old-fetcher chost paths tenant rollup period from to))
+      (time (bench-new-fetcher chost paths tenant rollup period from to))
+      )))
 
 (defn run-bench
   "Run benchmark."
